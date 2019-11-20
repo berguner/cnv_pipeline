@@ -1,2 +1,4 @@
-# cnv_pipeline
+# CNV Detection Pipeline for Exome Data
+
+
 
