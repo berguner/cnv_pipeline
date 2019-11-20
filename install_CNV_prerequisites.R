@@ -1,0 +1,8 @@
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("WES.1KG.WUGSC")
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg19")
+BiocManager::install("CODEX")
+BiocManager::install("devtools")
+devtools::install_github("yuchaojiang/CODEX2/package")
+install.packages('ExomeDepth')
