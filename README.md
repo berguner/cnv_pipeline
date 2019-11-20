@@ -1,4 +1,4 @@
-# CNV Detection Pipeline for Exome Data
+# CNV Detection Pipeline for Whole Exome NGS Data
 
 
 
