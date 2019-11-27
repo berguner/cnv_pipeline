@@ -6,12 +6,11 @@ Author: Bekir Erguner
 
 import os, sys
 import pandas
-import numpy as np
+from collections import OrderedDict
 import subprocess
 import multiprocessing
 import time
 import datetime
-import threading
 import gzip
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -24,7 +23,94 @@ import threading
 import plotly.express as px
 from plotly.offline import plot
 
-class sacct_watcher(threading.Thread):
+
+class SbatchCnvJobs(threading.Thread):
+    def __init__(self, cluster_id, sample_labels, sacct_watcher, config):
+        threading.Thread.__init__(self)
+        self.config = config
+        self.cluster_id = cluster_id
+        self.list_of_samples = []
+        for sample in sample_labels:
+            if 'likely' in sample_labels[sample] and sample_labels[sample]['likely'] == cluster_id:
+                self.list_of_samples.append(sample)
+            elif sample_labels[sample]['label'] == cluster_id:
+                self.list_of_samples.append(sample)
+        self.watcher = sacct_watcher
+        self.state = 'running'
+        self.pid_states = {}
+
+    def run(self):
+        self.submit_exomedepth()
+        for chromosome in range(1, 23):
+            self.submit_codex(chromosome)
+        time.sleep(10)
+        # Wait for the runs to finish
+        self.wait_to_finish()
+        # Check for failed codex runs and resubmit them
+        self.remove_likely_samples()
+        for chromosome in range(1, 23):
+            codex_out_path = os.path.join(self.config['project_folder'], 'codex_results',
+                                          'cls{}_CODEX2_chr{}.tsv'.format(self.cluster_id, chromosome))
+            if not os.path.exists(codex_out_path):
+                self.state = 'running'
+                self.submit_codex(chromosome)
+        # Wait for the runs to finish
+        self.wait_to_finish()
+        print('CNV analysis of the cluster {} has finished'.format(self.cluster_id))
+
+    def wait_to_finish(self):
+        while self.state != 'finished':
+            self.update_pid_states()
+            for k in self.pid_states:
+                if self.pid_states[k] == 'RUNNING' or self.pid_states[k] == 'PENDING':
+                    self.state = 'running'
+                    break
+                self.state = 'finished'
+            time.sleep(10)
+
+    def submit_codex(self, chromosome):
+        cmd = ['sbatch', '--partition=shortq', '--mem=8000', '--cpus=2',
+               '--job-name=codex_cls{}_chr{}'.format(self.cluster_id, chromosome),
+               '--error={}/codex_results/codex_cls{}_chr{}.log'.format(self.config['project_folder'], self.cluster_id,
+                                                                       chromosome),
+               '--output={}/codex_results/codex_cls{}_chr{}.log'.format(self.config['project_folder'], self.cluster_id,
+                                                                        chromosome),
+               os.path.join(self.config['pipeline_folder'], 'codex_chromosome_CNV.R'),
+               '--bed', self.config['bed_file'],
+               '--gtf', self.config['gtf_file'],
+               '--cluster', str(self.cluster_id),
+               '--project_folder', self.config['project_folder'],
+               '--sample_names', ','.join(self.list_of_samples),
+               '--chromosome', str(chromosome)]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE)
+        job_id = result.stdout.decode("utf-8").rstrip('\n').split(' ')[3]
+        self.pid_states[job_id] = 'PENDING'
+
+    def submit_exomedepth(self):
+        cmd = ['sbatch', '--partition=shortq', '--mem=8000', '--cpus=2',
+               '--job-name=exomedepth_cls{}'.format(self.cluster_id),
+               '--error={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'], self.cluster_id),
+               '--output={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'], self.cluster_id),
+               os.path.join(self.config['pipeline_folder'], 'exomedepth_CNV.R'),
+               '--bed', self.config['bed_file'],
+               '--cluster', str(self.cluster_id),
+               '--project_folder', self.config['project_folder'],
+               '--sample_names', ','.join(self.list_of_samples)]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE)
+        job_id = result.stdout.decode("utf-8").rstrip('\n').split(' ')[3]
+        self.pid_states[job_id] = 'PENDING'
+
+    def update_pid_states(self):
+        for k in self.pid_states:
+            self.pid_states[k] = self.watcher.get_job_state(k)
+
+    def remove_likely_samples(self):
+        self.list_of_samples = []
+        for sample in sample_labels:
+            if sample_labels[sample]['label'] == self.cluster_id:
+                self.list_of_samples.append(sample)
+
+class SacctWatcher(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.sacct_dict = {}
@@ -56,12 +142,12 @@ class sacct_watcher(threading.Thread):
             return 'JOB NOT FOUND'
 
     def stop(self):
-        print('sacct_watcher is stopped')
+        print('sacct_watcher has stopped')
         self._alive = False
 
 
 def sbatch_read_counting(new_samples, sample_annotations, config):
-    the_watcher = sacct_watcher()
+    the_watcher = SacctWatcher()
     the_watcher.start()
     coverage_script = os.path.join(config['pipeline_folder'],
                                    'codex_exome_coverage.R')
@@ -215,7 +301,7 @@ if __name__ == "__main__":
     if not os.path.exists(exomedepth_folder):
         os.mkdir(exomedepth_folder)
 
-    sample_annotations = {}
+    sample_annotations = OrderedDict()
     with open(config['sample_sheet']) as csv_file:
         try:
             reader = csv.DictReader(csv_file)
@@ -321,6 +407,7 @@ if __name__ == "__main__":
     sample_labels = {}
     for idx in range(len(clusterer.labels_)):
         sample_labels[samples_list[idx]] = {'label': clusterer.labels_[idx]}
+        sample_labels[samples_list[idx]] = {'likely': clusterer.labels_[idx]}
     print('Not clustered samples: {}'.format(label_count_dict[-1]['count']))
     label_df = pandas.DataFrame.from_dict(label_count_dict).transpose()
 
@@ -363,5 +450,65 @@ if __name__ == "__main__":
                      color='labels',
                      hover_data=['samples'])
     fig.update_layout(showlegend=False)
-    plot_file = os.path.join(project_folder, 't_SNE.html')
+    now = datetime.datetime.now()
+    plot_file = os.path.join(project_folder, now.strftime("%Y_%m_%d_%H.%M.%S_CNV_t_SNE.html"))
     plot(fig, filename=plot_file, auto_open=False)
+
+    # Save the final sample annotations and stats
+    sas_name = now.strftime("%Y_%m_%d_%H.%M.%S_CNV_pipeline_stats.tsv")
+    sas_file = os.path.join(config['project_folder'], sas_name)
+    field_names = []
+    for sample_name in sample_annotations:
+        field_names = list(sample_annotations[sample_name].keys())
+        break
+    with open(sas_file, 'w') as sas_out:
+        sas_writer = csv.DictWriter(sas_out, fieldnames=field_names, dialect='excel-tab')
+        sas_writer.writeheader()
+        for sample_name in sample_annotations:
+            sas_writer.writerow(sample_annotations[sample_name])
+
+    # Get the unique labels of clusters
+    unique_labels = {}
+    for l in range(len(clusterer.labels_)):
+        if str(clusterer.labels_[l]) not in unique_labels:
+            unique_labels[str(clusterer.labels_[l])] = True
+
+    # Remove labels without new samples
+    for label in unique_labels:
+        new_sample_exists = False
+        for sample_name in sample_annotations:
+            sample_result_file = os.path.join(project_folder, '{}_processed.txt'.format(sample_name))
+            if not os.path.exists(sample_result_file) and sample_name in samples_list:
+                if sample_labels['label'] == int(label) or sample_labels['likely'] == int(label):
+                    new_sample_exists = True
+        if not new_sample_exists:
+            unique_labels.pop(label)
+
+    if args.engine == 'slurm':
+        print("Submitting CNV analysis jobs to slurm")
+        the_watcher = SacctWatcher()
+        the_watcher.start()
+        cluster_threads = []
+        for label in ['1', '2']: #unique_labels:
+            cluster_id = int(label)
+            my_thread = SbatchCnvJobs(cluster_id=cluster_id,
+                                      sample_labels=sample_labels,
+                                      sacct_watcher=the_watcher,
+                                      config=config)
+            cluster_threads.append(my_thread)
+            my_thread.start()
+
+        # Wait for the CNV runs to finish
+        wait = True
+        while wait:
+            for th in cluster_threads:
+                if th.state == 'running':
+                    print('there are running jobs, sleeping')
+                    wait = True
+                    break
+                else:
+                    print('finished running jobs')
+                    wait = False
+            time.sleep(10)
+
+        the_watcher.stop()
