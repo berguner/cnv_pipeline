@@ -116,7 +116,6 @@ def local_read_counting(rc_args):
            '--sample_name', new_sample]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     for line in proc.stdout:
-        #sys.stdout.write(line.decode('utf-8'))
         logfile.write(line.decode('utf-8'))
     proc.wait()
     logfile.close()
@@ -142,7 +141,7 @@ def minimum_distance_label(distances):
 
 
 # Print iterations progress
-def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', printEnd="\r"):
     """
     Call in a loop to create terminal progress bar
     @params:
@@ -267,7 +266,7 @@ if __name__ == "__main__":
     print('Now retrieving read counts of first 10k regions/exons for clustering the samples')
     for rc_file in rc_files:
         counter += 1
-        printProgressBar(counter, len(rc_files))
+        print_progress_bar(counter, len(rc_files))
         sample_name = rc_file.replace('_exome_RC.csv.gz', '')
         rc_file = os.path.join(project_folder, 'read_counts', rc_file)
         rc = []
@@ -276,6 +275,8 @@ if __name__ == "__main__":
                 rc.append(int(line.decode("utf-8").rstrip('\n').split(',')[1]))
         sum_rc = sum(rc)
         mean_rc = sum_rc / len(rc)
+        if sample_name in sample_annotations:
+            sample_annotations[sample_name]['mean_read_count'] = mean_rc
         if mean_rc > args.min_mean_rc:
             sum_rc_per_kb = sum_rc / 1000
             tmp_rc = []
@@ -340,6 +341,18 @@ if __name__ == "__main__":
             likely_labels[i] = minimum_distance_label(distances)
             clusterer.labels_[i] = likely_labels[i]
             sample_labels[samples_list[i]]['likely'] = likely_labels[i]
+
+    # Add clustering labels to sample annotations for saving them later
+    for sample_name in sample_annotations:
+        if sample_name in sample_labels:
+            sample_annotations[sample_name]['cluster_label'] = sample_labels[sample_name]['label']
+            if 'likely' in sample_labels[sample_name]:
+                sample_annotations[sample_name]['closest_cluster_label'] = sample_labels[sample_name]['likely']
+            else:
+                sample_annotations[sample_name]['closest_cluster_label'] = 'NA'
+        else:
+            sample_annotations[sample_name]['cluster_label'] = 'NA'
+            sample_annotations[sample_name]['closest_cluster_label'] = 'NA'
 
     # Plot the clustering results and save it as an html file
     tsneDf['labels'] = clusterer.labels_
