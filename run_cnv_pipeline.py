@@ -110,6 +110,7 @@ class SbatchCnvJobs(threading.Thread):
             if sample_labels[sample]['label'] == self.cluster_id:
                 self.list_of_samples.append(sample)
 
+
 class SacctWatcher(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -301,16 +302,21 @@ if __name__ == "__main__":
     if not os.path.exists(exomedepth_folder):
         os.mkdir(exomedepth_folder)
 
+    # Populate sample annotations
     sample_annotations = OrderedDict()
-    with open(config['sample_sheet']) as csv_file:
-        try:
-            reader = csv.DictReader(csv_file)
-            for row in reader:
-                sample_annotations[row['sample_name']] = row
-        except csv.Error as err:
-            sys.stderr.write('Unable to read sample sheet\n')
-            sys.stderr.write(str(err))
-            exit(1)
+    bam_folder = config['bam_folder']
+    bam_prefix = config['bam_prefix']
+    bam_suffix = config['bam_suffix']
+    bam_files = []
+    for f in os.listdir(bam_folder):
+        if f[len(f)-len(bam_suffix):] == bam_suffix:
+            bam_files.append(f)
+    for bam_file in bam_files:
+        sample_name = bam_file[len(bam_prefix):len(bam_file) - len(bam_suffix)]
+        sample_annotations[sample_name] = {'sample_name': sample_name}
+        bam_path = os.path.join(bam_folder, bam_file)
+        sample_annotations[sample_name]['bam_file'] = bam_path
+    print('Found {} bam files in the bam_folder'.format(sample_annotations))
 
     # Check which samples have read counts and which are new
     # and generate read counts for the new samples
@@ -331,9 +337,9 @@ if __name__ == "__main__":
             if d.seconds > 3600:
                 new_samples.append(sample_name)
 
-    print('There are {} sample(s) without read counts'.format(len(new_samples)))
+    print('There are {} samples without read counts'.format(len(new_samples)))
     if len(new_samples) > 0:
-        print('Now counting the reads for the new sample(s)')
+        print('Now counting the reads for the new samples')
         if args.engine == 'slurm':
             sbatch_read_counting(new_samples, sample_annotations, config)
         elif args.engine == 'local':
@@ -378,7 +384,7 @@ if __name__ == "__main__":
     cohort_df = pandas.DataFrame.from_dict(rc_dict)
 
     samples_list = list(rc_dict.keys())
-    # Remove not covered regions from the data frame
+    # Remove 0 coverage regions from the data frame
     cohort_df = cohort_df[(cohort_df.T != 0).any()]
     x = cohort_df.loc[:, samples_list].transpose().values
     x = StandardScaler().fit_transform(x)
