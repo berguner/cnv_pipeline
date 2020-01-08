@@ -56,7 +56,7 @@ class SbatchCnvJobs(threading.Thread):
                 self.submit_codex(chromosome)
         # Wait for the runs to finish
         self.wait_to_finish()
-        print('CNV analysis of the cluster {} has finished'.format(self.cluster_id))
+        print('CNV analysis for the cluster {} has finished'.format(self.cluster_id))
 
     def wait_to_finish(self):
         while self.state != 'finished':
@@ -266,16 +266,6 @@ if __name__ == "__main__":
                         help='Number of threads to be used in case running locally. ~4GB of ram per thread is needed',
                         default=2,
                         type=int)
-    parser.add_argument('--min-cluster-size', '-z',
-                        dest='min_cluster_size',
-                        help='Minimum number of samples for HDBSCAN clustering',
-                        default=12,
-                        type=int)
-    parser.add_argument('--min-mean-rc', '-m',
-                        dest='min_mean_rc',
-                        help='Minimum accepted average read count per region',
-                        default=20,
-                        type=int)
     args = parser.parse_args()
 
     config = {}
@@ -316,7 +306,7 @@ if __name__ == "__main__":
         sample_annotations[sample_name] = {'sample_name': sample_name}
         bam_path = os.path.join(bam_folder, bam_file)
         sample_annotations[sample_name]['bam_file'] = bam_path
-    print('Found {} bam files in the bam_folder'.format(sample_annotations))
+    print('Found {} bam files in the bam_folder'.format(len(sample_annotations)))
 
     # Check which samples have read counts and which are new
     # and generate read counts for the new samples
@@ -369,7 +359,7 @@ if __name__ == "__main__":
         mean_rc = sum_rc / len(rc)
         if sample_name in sample_annotations:
             sample_annotations[sample_name]['mean_read_count'] = mean_rc
-        if mean_rc > args.min_mean_rc:
+        if mean_rc > config['min_mean_rc']:
             sum_rc_per_kb = sum_rc / 1000
             tmp_rc = []
             for c in rc:
@@ -381,9 +371,9 @@ if __name__ == "__main__":
         print('\n{} out of {} samples did not have adequate coverage for CNV analysis:\n{}'.format(len(failed_samples),
                                                                                                    len(rc_files),
                                                                                                    '\n'.join(failed_samples.keys())))
-    cohort_df = pandas.DataFrame.from_dict(rc_dict)
 
     samples_list = list(rc_dict.keys())
+    cohort_df = pandas.DataFrame.from_dict(rc_dict)
     # Remove 0 coverage regions from the data frame
     cohort_df = cohort_df[(cohort_df.T != 0).any()]
     x = cohort_df.loc[:, samples_list].transpose().values
@@ -396,7 +386,7 @@ if __name__ == "__main__":
     print('t-SNE done! Time elapsed: {} seconds'.format(time.time() - time_start))
 
     # Cluster tSNE results
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=args.min_cluster_size)
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=config['min_cluster_size'])
     clusterer.fit(exome_tsne)
 
     tsneDf = pandas.DataFrame(data=exome_tsne, columns=['component 1', 'component 2'])
@@ -410,15 +400,14 @@ if __name__ == "__main__":
             label_count_dict[l] = {'count': label_count_dict[l]['count'] + 1}
 
     # Create a dictionary of samples and clusters they belong
-    sample_labels = {}
+    sample_labels = OrderedDict()
     for idx in range(len(clusterer.labels_)):
         sample_labels[samples_list[idx]] = {'label': clusterer.labels_[idx]}
-        sample_labels[samples_list[idx]] = {'likely': clusterer.labels_[idx]}
+        sample_labels[samples_list[idx]]['likely'] = clusterer.labels_[idx]
     print('Not clustered samples: {}'.format(label_count_dict[-1]['count']))
     label_df = pandas.DataFrame.from_dict(label_count_dict).transpose()
 
     # Assign labels/clusters to the non-clustered samples
-    likely_labels = {}
     for i in range(len(clusterer.labels_)):
         if clusterer.labels_[i] == -1:
             print('Finding the closest cluster for sample {}'.format(samples_list[i]))
@@ -431,10 +420,11 @@ if __name__ == "__main__":
                     if clusterer.labels_[k] == label:
                         indices.append(k)
                 distances[label] = distance_to_cluster(i, indices, tsneDf)
-            likely_labels[i] = minimum_distance_label(distances)
-            clusterer.labels_[i] = likely_labels[i]
-            sample_labels[samples_list[i]]['likely'] = likely_labels[i]
-
+            clusterer.labels_[i] = minimum_distance_label(distances)
+            sample_labels[samples_list[i]]['likely'] = clusterer.labels_[i]
+    print('sas: {}\nlabels: {}\nclusters: {}'.format(len(sample_annotations),
+                                                     len(sample_labels),
+                                                     len(clusterer.labels_)))
     # Add clustering labels to sample annotations for saving them later
     for sample_name in sample_annotations:
         if sample_name in sample_labels:
@@ -448,7 +438,7 @@ if __name__ == "__main__":
             sample_annotations[sample_name]['closest_cluster_label'] = 'NA'
 
     # Plot the clustering results and save it as an html file
-    tsneDf['labels'] = clusterer.labels_
+    tsneDf['labels'] = [str(l) for l in clusterer.labels_]
     tsneDf['samples'] = samples_list
     fig = px.scatter(tsneDf,
                      x='component 1',
@@ -459,19 +449,6 @@ if __name__ == "__main__":
     now = datetime.datetime.now()
     plot_file = os.path.join(project_folder, now.strftime("%Y_%m_%d_%H.%M.%S_CNV_t_SNE.html"))
     plot(fig, filename=plot_file, auto_open=False)
-
-    # Save the final sample annotations and stats
-    sas_name = now.strftime("%Y_%m_%d_%H.%M.%S_CNV_pipeline_stats.tsv")
-    sas_file = os.path.join(config['project_folder'], sas_name)
-    field_names = []
-    for sample_name in sample_annotations:
-        field_names = list(sample_annotations[sample_name].keys())
-        break
-    with open(sas_file, 'w') as sas_out:
-        sas_writer = csv.DictWriter(sas_out, fieldnames=field_names, dialect='excel-tab')
-        sas_writer.writeheader()
-        for sample_name in sample_annotations:
-            sas_writer.writerow(sample_annotations[sample_name])
 
     # Get the unique labels of clusters
     unique_labels = {}
@@ -485,7 +462,7 @@ if __name__ == "__main__":
         for sample_name in sample_annotations:
             sample_result_file = os.path.join(project_folder, '{}_processed.txt'.format(sample_name))
             if not os.path.exists(sample_result_file) and sample_name in samples_list:
-                if sample_labels['label'] == int(label) or sample_labels['likely'] == int(label):
+                if sample_labels[sample_name]['label'] == int(label) or sample_labels[sample_name]['likely'] == int(label):
                     new_sample_exists = True
         if not new_sample_exists:
             unique_labels.pop(label)
@@ -495,7 +472,7 @@ if __name__ == "__main__":
         the_watcher = SacctWatcher()
         the_watcher.start()
         cluster_threads = []
-        for label in ['1', '2']: #unique_labels:
+        for label in unique_labels:
             cluster_id = int(label)
             my_thread = SbatchCnvJobs(cluster_id=cluster_id,
                                       sample_labels=sample_labels,
@@ -503,18 +480,59 @@ if __name__ == "__main__":
                                       config=config)
             cluster_threads.append(my_thread)
             my_thread.start()
-
         # Wait for the CNV runs to finish
         wait = True
         while wait:
             for th in cluster_threads:
                 if th.state == 'running':
-                    print('there are running jobs, sleeping')
                     wait = True
                     break
                 else:
-                    print('finished running jobs')
                     wait = False
             time.sleep(10)
-
+        print('Finished running CNV analysis jobs')
         the_watcher.stop()
+    else:
+        exit(1)
+    # TODO: Add support for args.engine == 'local':
+
+    # Retrieve CODEX2 cnv calls for each sample
+    if not os.path.exists(os.path.join(os.path.join(project_folder, 'codex_results', 'sample_results'))):
+        os.mkdir(os.path.join(project_folder, 'codex_results', 'sample_results'))
+    for idx in range(len(samples_list)):
+        sample_name = samples_list[idx]
+        name_length = len(sample_name)
+        sample_cluster = clusterer.labels_[idx]
+        sample_cnv_file = os.path.join(project_folder, 'codex_results', 'sample_results',
+                                       '{}_CODEX2.tsv'.format(sample_name))
+        if os.path.exists(sample_cnv_file):
+            continue
+        sample_cnv_lines = ['sample_name\tchr\tcnv\tst_bp\ted_bp\tlength_kb\tst_exon\ted_exon\traw_cov\tnorm_cov\tcopy_no\tlratio\tmBIC\n']
+        for chromosome in range(1, 23):
+            cluster_file = os.path.join(project_folder, 'codex_results',
+                                        'cls{}_CODEX2_chr{}.tsv'.format(sample_cluster, chromosome))
+            try:
+                with open(cluster_file, 'r') as my_file:
+                    for line in my_file.readlines():
+                        if line[:name_length] == sample_name:
+                            sample_cnv_lines.append(line)
+            except FileNotFoundError:
+                print('Could not open {}, skipping'.format(cluster_file))
+        sample_annotations[sample_name]['CODEX2_cnv_count'] = len(sample_cnv_lines) - 1
+        with open(sample_cnv_file, 'w') as out_file:
+            out_file.write(''.join(sample_cnv_lines))
+
+    # TODO: Extract ExomeDepth stats from the log files
+
+    # Save the final sample annotations and stats
+    sas_name = now.strftime("%Y_%m_%d_%H.%M.%S_CNV_pipeline_stats.tsv")
+    sas_file = os.path.join(config['project_folder'], sas_name)
+    field_names = []
+    for sample_name in sample_annotations:
+        field_names = list(sample_annotations[sample_name].keys())
+        break
+    with open(sas_file, 'w') as sas_out:
+        sas_writer = csv.DictWriter(sas_out, fieldnames=field_names, dialect='excel-tab')
+        sas_writer.writeheader()
+        for sample_name in sample_annotations:
+            sas_writer.writerow(sample_annotations[sample_name])
