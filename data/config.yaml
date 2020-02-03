@@ -1,0 +1,17 @@
+# The folder to save the pipeline output
+project_folder: "/scratch/lab_bsf/projects/BSA_0005_KBL_Exome/cnv_pipeline"
+# Pipeline source code folder
+pipeline_folder: "/home/berguener/src/cnv_pipeline"
+# Path to the bed file containing exonic regions
+bed_file: "/data/groups/lab_bsf/resources/interval_lists/exome_cnv_calling_regions_b37.bed"
+# Path to Ensembl genes GTF file
+gtf_file: "/scratch/lab_bsf/resources/genomes/GRCh37_e87/Homo_sapiens.GRCh37.87.gtf.gz"
+# Path of the folder including bam files with index files
+bam_folder: "/scratch/lab_bsf/projects/BSA_0005_KBL_Exome/b37"
+# Prefix to remove to get the sample names
+bam_prefix: "variant_calling_process_sample_"
+# Suffix to remove to get the samples names
+bam_suffix: "_realigned.bam"
+# Minimum accepted cluster size fo HDBSCAN clustering
+min_cluster_size: 12
+# Minimum accepted average read count on exonic regions
