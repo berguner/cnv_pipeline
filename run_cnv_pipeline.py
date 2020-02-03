@@ -25,6 +25,9 @@ from plotly.offline import plot
 
 
 class SbatchCnvJobs(threading.Thread):
+    """
+    The Thread object for running the CNV analysis for a given cluster of samples. The jobs will be submitted to Slurm.
+    """
     def __init__(self, cluster_id, sample_labels, sacct_watcher, config):
         threading.Thread.__init__(self)
         self.config = config
@@ -112,6 +115,10 @@ class SbatchCnvJobs(threading.Thread):
 
 
 class SacctWatcher(threading.Thread):
+    """
+    The class for creating the SacctWatcher Thread object. This object creates a dictionary of Sacct output and updates
+    it every 10 seconds. The other threads can get the updated information from this object without burdening the Slurm
+    """
     def __init__(self):
         threading.Thread.__init__(self)
         self.sacct_dict = {}
@@ -148,6 +155,13 @@ class SacctWatcher(threading.Thread):
 
 
 def sbatch_read_counting(new_samples, sample_annotations, config):
+    """
+    The function for running the read count script for the new samples in parallel using Slurm
+    :param new_samples: Samples without read count file
+    :param sample_annotations: Dictionary containing sample annotations
+    :param config: Configuration dictionary of the pipeline
+    :return: None
+    """
     the_watcher = SacctWatcher()
     the_watcher.start()
     coverage_script = os.path.join(config['pipeline_folder'],
@@ -188,6 +202,11 @@ def sbatch_read_counting(new_samples, sample_annotations, config):
 
 
 def local_read_counting(rc_args):
+    """
+    The function for running the read count script for a given sample
+    :param rc_args: Dictionary carrying the arguments for the read counting R script
+    :return: None
+    """
     new_sample = rc_args['new_sample']
     bam_file = rc_args['bam_file']
     config = rc_args['config']
@@ -209,6 +228,14 @@ def local_read_counting(rc_args):
 
 
 def distance_to_cluster(index, cluster_indices, df):
+    """
+    This function calculates the distance of the outlier sample with the given index to the cluster with the given
+    cluster_indices
+    :param index: Index of the outlier sample
+    :param cluster_indices: Indices of the cluster of interest
+    :param df: pandas DataFrame containing the t-SNE components
+    :return: Average distance between outlier sample and the samples in the cluster of interest
+    """
     mysum = 0.0
     for i in cluster_indices:
         mysum += abs(df.loc[[index], ['component 1']].values[0] - df.loc[[i], ['component 1']].values[0])
@@ -218,6 +245,11 @@ def distance_to_cluster(index, cluster_indices, df):
 
 
 def minimum_distance_label(distances):
+    """
+    This function finds the label of closest cluster
+    :param distances: Dictionary of the label: distance information
+    :return: key (label) of the closest cluster
+    """
     min_value = -1
     min_key = ''
     for key in distances:
