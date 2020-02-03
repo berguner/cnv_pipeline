@@ -78,6 +78,8 @@ exons.hg19.GRanges <- GenomicRanges::GRanges(seqnames = exons.hg19$chromosome,
 #case_sample <- 'SCID_177_S53796'
 
 for(case_sample in colnames(Y)){
+  output.file <- file.path(out_folder, paste(case_sample, '_ExomeDepth.tsv', sep = ''))
+  if(!file.exists(output.file) || p$force != 'n' ){
   message(paste('Running ExomeDepth for sample:', case_sample))
   my.test <- exome_count[[case_sample]]
   my.ref.samples <- colnames(Y)[,1]
@@ -110,6 +112,6 @@ for(case_sample in colnames(Y)){
                              reference.annotation = exons.hg19.GRanges,
                              min.overlap = 0.0001,
                              column.name = 'exons.hg19')
-  output.file <- file.path(out_folder, paste(case_sample, '_ExomeDepth.tsv', sep = ''))
   write.table(file = output.file, x = all.exons@CNV.calls, sep='\t', quote=FALSE, row.names=FALSE, col.names = TRUE)
+  }
 }
