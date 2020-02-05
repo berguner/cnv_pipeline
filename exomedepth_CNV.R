@@ -17,8 +17,8 @@ args <- add_argument(args,arg='--sample_names', short='-s',
                      help='Comma separated sample names')
 args <- add_argument(args,arg='--cluster', short='-c', default='0',
                      help='Identifier for the batch of samples')
-args <- add_argument(args,arg='--force', short='-f', default='n',
-                     help='Set this to y if you want to overwrite the existing results')
+args <- add_argument(args,arg='--force', short='-f', default='y',
+                     help='Set this to n if you do not want to overwrite the existing results')
 p <- parse_args(args)
 
 out_folder <- file.path(p$project_folder, 'exomedepth_results')

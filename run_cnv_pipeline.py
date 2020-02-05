@@ -170,7 +170,7 @@ def sbatch_read_counting(new_samples, sample_annotations, config):
     project_folder = config['project_folder']
     coverage_jobs = {}
     for sample in new_samples:
-        cmd = ['sbatch', f'--job-name={sample}_exome_RC', '--mem=8000', '--cpus=1', '--partition=shortq',
+        cmd = ['sbatch', '--job-name={}_exome_RC'.format(sample), '--mem=8000', '--cpus=1', '--partition=shortq',
                '--error={}/read_counts/{}_exome_RC.csv.log'.format(project_folder, sample),
                '--output={}/read_counts/{}_exome_RC.csv.log'.format(project_folder, sample),
                coverage_script,
@@ -195,7 +195,7 @@ def sbatch_read_counting(new_samples, sample_annotations, config):
                 fail_count += 1
         #print(str(coverage_jobs))
         time.sleep(60)
-    print('{} out of {} read count jobs were completed and {} of them had failed'.format(complete_count,
+    print('{} out of {} read count jobs were completed and {} of them failed'.format(complete_count,
                                                                                          len(coverage_jobs),
                                                                                          fail_count))
     the_watcher.stop()
@@ -226,6 +226,78 @@ def local_read_counting(rc_args):
     proc.wait()
     logfile.close()
 
+
+def local_codex_cnv(codex_args):
+    """
+    The function for running the codex_chromosome_CNV.R script for a given chromosome and cluster of samples
+    :param codex_args: Dictionary carrying the arguments for the codex_chromosome_CNV.R script
+    :return: None
+    """
+    config = codex_args['config']
+    cluster_id = codex_args['cluster_id']
+    chromosome = codex_args['chromosome']
+    sample_labels = codex_args['sample_labels']
+    codex_script = os.path.join(config['pipeline_folder'],
+                                'codex_chromosome_CNV.R')
+    print('Running CODEX2 CNV analysis for cluster {} chromosome {}'.format(cluster_id,
+                                                                            chromosome))
+    list_of_samples = []
+    for sample in sample_labels:
+        if 'likely' in sample_labels[sample] and sample_labels[sample]['likely'] == cluster_id:
+            list_of_samples.append(sample)
+        elif sample_labels[sample]['label'] == cluster_id:
+            list_of_samples.append(sample)
+    logfile = open('{}/codex_results/codex_cls{}_chr{}.log'.format(config['project_folder'],
+                                                                   cluster_id,
+                                                                   chromosome),
+                   'w')
+    cmd = ['Rscript', '--vanilla',
+           codex_script,
+           '--bed', config['bed_file'],
+           '--gtf', config['gtf_file'],
+           '--cluster', str(cluster_id),
+           '--project_folder', config['project_folder'],
+           '--sample_names', ','.join(list_of_samples),
+           '--chromosome', str(chromosome)]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in proc.stdout:
+        logfile.write(line.decode('utf-8'))
+    proc.wait()
+    logfile.close()
+
+
+def local_exomedepth_cnv(exomedepth_args):
+    """
+    The function for running the exomedepth_CNV.R script for a given cluster of samples
+    :param codex_args: Dictionary carrying the arguments for the codex_chromosome_CNV.R script
+    :return: None
+    """
+    config = exomedepth_args['config']
+    cluster_id = exomedepth_args['cluster_id']
+    sample_labels = exomedepth_args['sample_labels']
+    exomedepth_script = os.path.join(config['pipeline_folder'],
+                                     'exomedepth_CNV.R')
+    print('Running ExomeDepth CNV analysis for cluster {}'.format(cluster_id))
+    list_of_samples = []
+    for sample in sample_labels:
+        if 'likely' in sample_labels[sample] and sample_labels[sample]['likely'] == cluster_id:
+            list_of_samples.append(sample)
+        elif sample_labels[sample]['label'] == cluster_id:
+            list_of_samples.append(sample)
+    logfile = open('{}/exomedepth_results/exomedepth_cls{}.log'.format(config['project_folder'],
+                                                                       cluster_id),
+                   'w')
+    cmd = ['Rscript', '--vanilla',
+           exomedepth_script,
+           '--bed', config['bed_file'],
+           '--cluster', str(cluster_id),
+           '--project_folder', config['project_folder'],
+           '--sample_names', ','.join(list_of_samples)]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in proc.stdout:
+        logfile.write(line.decode('utf-8'))
+    proc.wait()
+    logfile.close()
 
 def distance_to_cluster(index, cluster_indices, df):
     """
@@ -359,9 +431,8 @@ if __name__ == "__main__":
             if d.seconds > 3600:
                 new_samples.append(sample_name)
 
-    print('There are {} samples without read counts'.format(len(new_samples)))
     if len(new_samples) > 0:
-        print('Now counting the reads for the new samples')
+        print('There are {} samples without read counts, now counting the reads'.format(len(new_samples)))
         if args.engine == 'slurm':
             sbatch_read_counting(new_samples, sample_annotations, config)
         elif args.engine == 'local':
@@ -457,6 +528,7 @@ if __name__ == "__main__":
     print('sas: {}\nlabels: {}\nclusters: {}'.format(len(sample_annotations),
                                                      len(sample_labels),
                                                      len(clusterer.labels_)))
+
     # Add clustering labels to sample annotations for saving them later
     for sample_name in sample_annotations:
         if sample_name in sample_labels:
@@ -482,22 +554,21 @@ if __name__ == "__main__":
     plot_file = os.path.join(project_folder, now.strftime("%Y_%m_%d_%H.%M.%S_CNV_t_SNE.html"))
     plot(fig, filename=plot_file, auto_open=False)
 
-    # Get the unique labels of clusters
+    # Get the unique labels of clusters with new samples
     unique_labels = {}
     for l in range(len(clusterer.labels_)):
-        if str(clusterer.labels_[l]) not in unique_labels:
-            unique_labels[str(clusterer.labels_[l])] = True
-
-    # Remove labels without new samples
-    for label in unique_labels:
         new_sample_exists = False
         for sample_name in sample_annotations:
-            sample_result_file = os.path.join(project_folder, '{}_processed.txt'.format(sample_name))
+            sample_result_file = os.path.join(project_folder,
+                                              'annotated_results',
+                                              '{}_AnnotSV.tsv'.format(sample_name))
             if not os.path.exists(sample_result_file) and sample_name in samples_list:
-                if sample_labels[sample_name]['label'] == int(label) or sample_labels[sample_name]['likely'] == int(label):
+                if sample_labels[sample_name]['label'] == int(clusterer.labels_[l])\
+                        or sample_labels[sample_name]['likely'] == int(clusterer.labels_[l]):
                     new_sample_exists = True
-        if not new_sample_exists:
-            unique_labels.pop(label)
+        if str(clusterer.labels_[l]) not in unique_labels and new_sample_exists:
+            unique_labels[str(clusterer.labels_[l])] = True
+
 
     if args.engine == 'slurm':
         print("Submitting CNV analysis jobs to slurm")
@@ -524,9 +595,30 @@ if __name__ == "__main__":
             time.sleep(10)
         print('Finished running CNV analysis jobs')
         the_watcher.stop()
-    else:
-        exit(1)
-    # TODO: Add support for args.engine == 'local':
+    elif args.engine == 'local':
+        print("Running ExomeDepth CNV analysis jobs locally")
+        list_of_edp_arg_dicts = []
+        for label in unique_labels:
+            cluster_id = int(label)
+            list_of_edp_arg_dicts.append({'config': config,
+                                          'cluster_id': cluster_id,
+                                          'sample_labels': sample_labels
+                                          })
+        edp_pool = multiprocessing.Pool(args.threads)
+        edp_pool.map(local_exomedepth_cnv, list_of_edp_arg_dicts)
+
+        print("Running CODEX2 CNV analysis jobs locally")
+        list_of_codex_arg_dicts = []
+        for label in unique_labels:
+            cluster_id = int(label)
+            for chromosome in range(1, 23):
+                list_of_codex_arg_dicts.append({'config': config,
+                                                'cluster_id': cluster_id,
+                                                'chromosome': chromosome,
+                                                'sample_labels': sample_labels
+                                                })
+        cdx_pool = multiprocessing.Pool(args.threads)
+        cdx_pool.map(local_codex_cnv, list_of_codex_arg_dicts)
 
     # Retrieve CODEX2 cnv calls for each sample
     if not os.path.exists(os.path.join(os.path.join(project_folder, 'codex_results', 'sample_results'))):

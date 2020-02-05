@@ -17,8 +17,8 @@ args <- add_argument(args,arg='--cluster', default='0',
                      help='Identifier for the batch of samples')
 args <- add_argument(args,arg='--chromosome', short='-c', default='1',
                      help='Chromosome/contig name')
-args <- add_argument(args,arg='--force', short='-f', default='n',
-                     help='Set to y if you want to overwrite the existing results')
+args <- add_argument(args,arg='--force', short='-f', default='y',
+                     help='Set to n if you do not want to overwrite the existing results')
 args <- add_argument(args,arg='--write_sample_output', default='n',
                      help='Set to y if you want the results per sample')
 args <- add_argument(args, arg='--gtf',
