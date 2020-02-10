@@ -144,7 +144,7 @@ class SacctWatcher(threading.Thread):
                 self.sacct_dict[line[0]][field_names[i]] = line[i]
 
     def get_job_state(self, job_id):
-        if job_id in self.sacct_dict:
+        if job_id in self.sacct_dict and 'State' in self.sacct_dict[job_id]:
             return self.sacct_dict[job_id]['State']
         else:
             return 'JOB NOT FOUND'
@@ -299,6 +299,26 @@ def local_exomedepth_cnv(exomedepth_args):
     proc.wait()
     logfile.close()
 
+
+def local_annotsv(annotsv_args):
+    config = annotsv_args['config']
+    sample_name = annotsv_args['sample_name']
+    annotsv_script = os.path.join(config['project_folder'],
+                                  'annotate_cnv.sh')
+    logfile = open('{}/annotated_results/{}_AnnotSV.log'.format(config['project_folder'],
+                                                                sample_name),
+                   'w')
+    cmd = ['bash',
+           annotsv_script,
+           config['project_folder'],
+           sample_name]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in proc.stdout:
+        logfile.write(line.decode('utf-8'))
+    proc.wait()
+    logfile.close()
+
+
 def distance_to_cluster(index, cluster_indices, df):
     """
     This function calculates the distance of the outlier sample with the given index to the cluster with the given
@@ -448,10 +468,11 @@ if __name__ == "__main__":
     rc_dict = {}
     failed_samples = {}
     counter = 0
-    print('Now retrieving read counts of first 10k regions/exons for clustering the samples')
+    print('Now retrieving read counts of the first 10k regions/exons for clustering the samples')
     for rc_file in rc_files:
         counter += 1
-        print_progress_bar(counter, len(rc_files))
+        #print_progress_bar(counter, len(rc_files))
+        print('{}/{} read counts were retrieved'.format(counter, len(rc_files)), end='\r')
         sample_name = rc_file.replace('_exome_RC.csv.gz', '')
         rc_file = os.path.join(project_folder, 'read_counts', rc_file)
         rc = []
@@ -475,6 +496,7 @@ if __name__ == "__main__":
                                                                                                    len(rc_files),
                                                                                                    '\n'.join(failed_samples.keys())))
 
+    print('Now performing the clustering')
     samples_list = list(rc_dict.keys())
     cohort_df = pandas.DataFrame.from_dict(rc_dict)
     # Remove 0 coverage regions from the data frame
@@ -525,9 +547,8 @@ if __name__ == "__main__":
                 distances[label] = distance_to_cluster(i, indices, tsneDf)
             clusterer.labels_[i] = minimum_distance_label(distances)
             sample_labels[samples_list[i]]['likely'] = clusterer.labels_[i]
-    print('sas: {}\nlabels: {}\nclusters: {}'.format(len(sample_annotations),
-                                                     len(sample_labels),
-                                                     len(clusterer.labels_)))
+    print('# of samples in total: {}\n# of samples passed QC: {}'.format(len(sample_annotations),
+                                                                         len(sample_labels)))
 
     # Add clustering labels to sample annotations for saving them later
     for sample_name in sample_annotations:
@@ -577,6 +598,7 @@ if __name__ == "__main__":
         cluster_threads = []
         for label in unique_labels:
             cluster_id = int(label)
+            print("Submitted CNV analysis jobs to slurm for cluster {}".format(label))
             my_thread = SbatchCnvJobs(cluster_id=cluster_id,
                                       sample_labels=sample_labels,
                                       sacct_watcher=the_watcher,
@@ -599,6 +621,7 @@ if __name__ == "__main__":
         print("Running ExomeDepth CNV analysis jobs locally")
         list_of_edp_arg_dicts = []
         for label in unique_labels:
+            print("Running ExomeDepth CNV analysis jobs locally for cluster {}".format(label))
             cluster_id = int(label)
             list_of_edp_arg_dicts.append({'config': config,
                                           'cluster_id': cluster_id,
@@ -610,6 +633,7 @@ if __name__ == "__main__":
         print("Running CODEX2 CNV analysis jobs locally")
         list_of_codex_arg_dicts = []
         for label in unique_labels:
+            print("Running CODEX2 CNV analysis jobs locally for cluster {}".format(label))
             cluster_id = int(label)
             for chromosome in range(1, 23):
                 list_of_codex_arg_dicts.append({'config': config,
@@ -620,7 +644,7 @@ if __name__ == "__main__":
         cdx_pool = multiprocessing.Pool(args.threads)
         cdx_pool.map(local_codex_cnv, list_of_codex_arg_dicts)
 
-    # Retrieve CODEX2 cnv calls for each sample
+    print("Retrieving CODEX2 cnv calls for each sample")
     if not os.path.exists(os.path.join(os.path.join(project_folder, 'codex_results', 'sample_results'))):
         os.mkdir(os.path.join(project_folder, 'codex_results', 'sample_results'))
     for idx in range(len(samples_list)):
@@ -645,6 +669,19 @@ if __name__ == "__main__":
         sample_annotations[sample_name]['CODEX2_cnv_count'] = len(sample_cnv_lines) - 1
         with open(sample_cnv_file, 'w') as out_file:
             out_file.write(''.join(sample_cnv_lines))
+
+    list_of_annotsv_args = []
+    if not os.path.exists('{}/annotated_results'.format(config['project_folder'])):
+        os.mkdir('{}/annotated_results'.format(config['project_folder']))
+    for sample_name in sample_annotations:
+        sample_result_file = os.path.join(project_folder,
+                                          'annotated_results',
+                                          '{}_AnnotSV.tsv'.format(sample_name))
+        if not os.path.exists(sample_result_file):
+            list_of_annotsv_args.append({'sample_name': sample_name,
+                                         'config': config})
+    annotsv_pool = multiprocessing.Pool(args.threads)
+    annotsv_pool.map(local_annotsv, list_of_annotsv_args)
 
     # TODO: Extract ExomeDepth stats from the log files
 
