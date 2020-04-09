@@ -303,7 +303,7 @@ def local_exomedepth_cnv(exomedepth_args):
 def local_annotsv(annotsv_args):
     config = annotsv_args['config']
     sample_name = annotsv_args['sample_name']
-    annotsv_script = os.path.join(config['project_folder'],
+    annotsv_script = os.path.join(config['pipeline_folder'],
                                   'annotate_cnv.sh')
     logfile = open('{}/annotated_results/{}_AnnotSV.log'.format(config['project_folder'],
                                                                 sample_name),
@@ -688,12 +688,41 @@ if __name__ == "__main__":
     # Save the final sample annotations and stats
     sas_name = now.strftime("%Y_%m_%d_%H.%M.%S_CNV_pipeline_stats.tsv")
     sas_file = os.path.join(config['project_folder'], sas_name)
-    field_names = []
-    for sample_name in sample_annotations:
-        field_names = list(sample_annotations[sample_name].keys())
-        break
+    field_names = ['sample_name', 'bam_file', 'mean_read_count', 'cluster_label', 'closest_cluster_label', 'CODEX2_cnv_count']
     with open(sas_file, 'w') as sas_out:
         sas_writer = csv.DictWriter(sas_out, fieldnames=field_names, dialect='excel-tab')
         sas_writer.writeheader()
         for sample_name in sample_annotations:
             sas_writer.writerow(sample_annotations[sample_name])
+
+    # Check if it is possible to run CNV aggregation script
+    aggregation_resources = ['all_gene_symbol_file', 'canonical_file', 'pli_score_file', 'hi_score_file']
+    aggregation_check = True
+    for a in aggregation_resources:
+        if a in config and os.path.exists(config[a]):
+            continue
+        else:
+            aggregation_check = False
+            break
+
+    # Run the CNV aggregation script
+    if aggregation_check:
+        if not os.path.exists('{}/aggregated'.format(project_folder)):
+            os.mkdir('{}/aggregated'.format(project_folder))
+        aggregation_script = os.path.join(config['pipeline_folder'], 'aggregate_cnv_deletions.R')
+        cmd = ['Rscript', '--vanilla',
+               aggregation_script,
+               '--project_id', config['project_name'],
+               '--sample_sheet', config['sample_annotation_sheet'],
+               '--project_folder', config['project_folder'],
+               '--gtf', config['gtf_file'],
+               '--all_gene_symbol_file', config['all_gene_symbol_file'],
+               '--canonical_file', config['canonical_file'],
+               '--pli_score_file', config['pli_score_file'],
+               '--hi_score_file', config['hi_score_file']]
+        logfile = open('{}/aggregated/aggregate.log'.format(project_folder), 'w')
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in proc.stdout:
+            logfile.write(line.decode('utf-8'))
+        proc.wait()
+        logfile.close()
