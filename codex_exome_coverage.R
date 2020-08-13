@@ -55,3 +55,4 @@ colnames(Y) = sampname
 outz <- gzfile(file.path(p$project_folder, 'read_counts', paste(sampname, '_exome_RC.csv.gz', sep='')))
 write.csv(Y, file = outz, quote = FALSE)
 
+sessionInfo()
