@@ -3,13 +3,15 @@
 ## Introduction
 This pipeline is designed to detect CNV in many exome samples prepared with various exome capture kits. The pipeline includes a clustering step
 which attempts to separate samples into smaller groups which have similar coverage patterns. Given that there are enough number of samples from
-each exome panel/kit, the clustering should reduce the batch effects and increase the accuracy.
+each exome panel/kit, the clustering should reduce the batch effects and increase the sensitivity and specificity.
+
+The pipeline currently supports GRCh37 genome version only.
 
 ## Software Requirements
 
-* Python 3.6
+* Python >3.6 
     * hdbscan, scikit-learn, plotly, pandas, sci-py
-* R 3.5 or greater
+* R >3.5
 * [AnnotSV](https://lbgi.fr/AnnotSV/)
 * Slurm (sbatch & sacct) - if running on a HPC cluster
 
