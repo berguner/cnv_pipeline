@@ -40,7 +40,7 @@ awk -v bed=${EDP_BED} '{
 }' ${EDP_TSV} | sort -k1,1 -k2,2n -k3,3n >> ${EDP_BED} ;
 bedtools unionbedg -i ${CODEX_BED} -i ${EDP_BED} -filler NA | \
   awk '{if($4 != "NA" || $5 != "NA") print $0}' > ${UNION_BED} ;
-${ANNOTSV}/bin/AnnotSV/AnnotSV.tcl -SVinputFile ${UNION_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
+${ANNOTSV}/bin/AnnotSV -SVinputFile ${UNION_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
 awk 'BEGIN {FS = "\t"; OFS = "\t";} {
     if(NR == 1) {
     $6="CODEX2_pos\tCDX_type\tCDX_length(Kbp)\tCDX_raw_coverage\tCDX_normalized_coverage\tCDX_copy_number\tCDX_likelihood";
@@ -74,7 +74,7 @@ awk -v bed=${CODEX_BED} '{
     print $2"\t"$4"\t"$5"\t"$2":"$4"-"$5"|"$3"|"($5-$4)/1000"|"$9"|"$10"|"$11"|"$12"|"$13;
     }
 }' ${CODEX_TSV} | sort -k1,1 -k2,2n -k3,3n >> ${CODEX_BED} ;
-${ANNOTSV}/bin/AnnotSV/AnnotSV.tcl -SVinputFile ${CODEX_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
+${ANNOTSV}/bin/AnnotSV -SVinputFile ${CODEX_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
 awk 'BEGIN {FS = "\t"; OFS = "\t";} {
     if(NR == 1) {
     $6="CODEX2_pos\tCDX_type\tCDX_length(Kbp)\tCDX_raw_coverage\tCDX_normalized_coverage\tCDX_copy_number\tCDX_likelihood";
@@ -101,7 +101,7 @@ awk -v bed=${EDP_BED} '{
     print $7"\t"$5"\t"$6"\t"$7":"$5"-"$6"|"substr($3,1,3)"|"($6-$5)/1000"|"$10"|"$11"|"$12"|"$9"|"$4"|"$13;
     }
 }' ${EDP_TSV} | sort -k1,1 -k2,2n -k3,3n >> ${EDP_BED} ;
-${ANNOTSV}/bin/AnnotSV/AnnotSV.tcl -SVinputFile ${EDP_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
+${ANNOTSV}/bin/AnnotSV -SVinputFile ${EDP_BED} -outputFile ${ANNO_TSV} > ${FINAL_TSV}.log 2>&1;
 awk 'BEGIN {FS = "\t"; OFS = "\t";} {
     if(NR == 1) {
     $6="ExomeDepth_pos\tEDP_type\tEDP_length(Kbp)\tEDP_reads_expected\tEDP_reads_observed\tEDP_reads_ratio\tEDP_BayesFactor\tEDP_num_exons\tEDP_Common_CNV";
