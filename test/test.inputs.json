@@ -1,0 +1,19 @@
+{
+  "cnv_pipeline.project_name": "BSA_0005_KBL_Exome",
+  "cnv_pipeline.sample_annotation_sheet": "/home/mschuster/src/bsfconfiguration/variant_calling/BSA_0005_KBL_Exome_variant_calling_samples.csv",
+  "cnv_pipeline.project_folder": "/nobackup/lab_bsf/projects/BSA_0005_KBL_Exome/b37_cnv_pipeline",
+  "cnv_pipeline.pipeline_folder": "/home/berguener/src/cnv_pipeline",
+  "cnv_pipeline.bed_file": "/research/lab_bsf/resources/intervals/exome_cnv_calling_regions_b37.bed",
+  "cnv_pipeline.assembly": "b37",
+  "cnv_pipeline.codex.gtf_file": "/nobackup/lab_bsf/resources/genomes/GRCh37_e87/Homo_sapiens.GRCh37.87.gtf.gz",
+  "cnv_pipeline.count_reads.bam_folder": "/nobackup/lab_bsf/projects/BSA_0005_KBL_Exome/b37",
+  "cnv_pipeline.count_reads.bam_prefix": "variant_calling_process_sample_",
+  "cnv_pipeline.count_reads.bam_suffix": "_realigned.bam",
+  "cnv_pipeline.cluster_samples.min_cluster_size": 12,
+  "cnv_pipeline.cluster_samples.min_mean_rc": 20,
+
+  "cnv_pipeline.all_gene_symbol_file": "/research/lab_bsf/resources/cnv_data/boztug_reference/2019-11-22_ibd_pid_hm_genes.found.txt",
+  "cnv_pipeline.canonical_file": "/research/lab_bsf/resources/cnv_data/boztug_reference/canonical_transcripts.csv",
+  "cnv_pipeline.pli_score_file": "/research/lab_bsf/resources/cnv_data/boztug_reference/fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt",
+  "cnv_pipeline.hi_score_file": "/research/lab_bsf/resources/cnv_data/boztug_reference/HI_Predictions_Version3.bed"
+}
