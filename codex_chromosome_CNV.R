@@ -24,6 +24,9 @@ args <- add_argument(args,arg='--write_sample_output', default='n',
 args <- add_argument(args, arg='--gtf',
                      default = 'Y:/lab_bsf/resources/genomes/GRCh37_e87/Homo_sapiens.GRCh37.87.gtf.gz',
                      help='The path of the Ensembl GTF file')
+args <- add_argument(args, arg='--assembly',
+                     default = 'b37',
+                     help='The reference genome version; b37 or hg38')
 p <- parse_args(args)
 
 # Create output folder
@@ -40,8 +43,15 @@ exomtarg <- read.table(bedFile, sep = "\t")
 ref <- GRanges(seqnames = exomtarg[, 1], ranges = IRanges(start = exomtarg[, 2], end = exomtarg[, 3]))
 ref <- sort(ref)
 
-# Genome is hg19 by default
-genome = BSgenome.Hsapiens.UCSC.hg19
+# Genome is b37/hg19 by default
+if(p$assembly == 'b37'){
+  genome = BSgenome.Hsapiens.UCSC.hg19
+} else if(p$assembly == 'hg38'){
+  library(BSgenome.Hsapiens.UCSC.hg38)
+  genome = BSgenome.Hsapiens.UCSC.hg38
+} else{
+  quit(status=1)
+}
 
 # Gather the read counts of the exome samples from previously generated csv files
 Y <- matrix(NA, nrow = length(ref), ncol = length(sample_names))

@@ -19,6 +19,9 @@ args <- add_argument(args,arg='--cluster', short='-c', default='0',
                      help='Identifier for the batch of samples')
 args <- add_argument(args,arg='--force', short='-f', default='y',
                      help='Set this to n if you do not want to overwrite the existing results')
+args <- add_argument(args, arg='--assembly',
+                     default = 'b37',
+                     help='The reference genome version; b37 or hg38')
 p <- parse_args(args)
 
 out_folder <- file.path(p$project_folder, 'exomedepth_results')
@@ -35,8 +38,15 @@ exomtarg <- read.table(bedFile, sep = "\t")
 ref <- GRanges(seqnames = exomtarg[, 1], ranges = IRanges(start = exomtarg[, 2], end = exomtarg[, 3]))
 ref <- sort(ref)
 
-# Genome is hg19 by default
-genome = BSgenome.Hsapiens.UCSC.hg19
+# Genome is b37/hg19 by default
+if(p$assembly == 'b37'){
+  genome = BSgenome.Hsapiens.UCSC.hg19
+} else if(p$assembly == 'hg38'){
+  library(BSgenome.Hsapiens.UCSC.hg38)
+  genome = BSgenome.Hsapiens.UCSC.hg38
+} else{
+  quit(status=1)
+}
 
 # Get the GC content and mapabilitiy values for the exonic ranges
 gc <- getgc(ref, genome = genome)
@@ -104,14 +114,14 @@ for(case_sample in colnames(Y)){
                         start = exome_count$start,
                         end = exome_count$end,
                         name = exome_count$names)
-  all.exons <- AnnotateExtra(x = all.exons,
+  if(p$assembly == 'b37'){all.exons <- AnnotateExtra(x = all.exons,
                              reference.annotation = Conrad.hg19.common.CNVs,
                              min.overlap = 0.5,
                              column.name = 'Conrad.hg19')
   all.exons <- AnnotateExtra(x = all.exons,
                              reference.annotation = exons.hg19.GRanges,
                              min.overlap = 0.0001,
-                             column.name = 'exons.hg19')
+                             column.name = 'exons.hg19')}
   write.table(file = output.file, x = all.exons@CNV.calls, sep='\t', quote=FALSE, row.names=FALSE, col.names = TRUE)
   }
 }
