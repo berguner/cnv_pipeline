@@ -4,30 +4,33 @@
 Author: Bekir Erguner
 """
 
-import os, sys
-import pandas
-from collections import OrderedDict
-import subprocess
-import multiprocessing
-import time
+import argparse
+import csv
 import datetime
 import gzip
-from sklearn.preprocessing import StandardScaler
+import multiprocessing
+import os
+import subprocess
+import sys
+import threading
+import time
+from collections import OrderedDict
+
+import hdbscan
+import pandas
+import plotly.express as px
+import yaml
+from plotly.offline import plot
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-import hdbscan
-import argparse
-import yaml
-import csv
-import threading
-import plotly.express as px
-from plotly.offline import plot
+from sklearn.preprocessing import StandardScaler
 
 
 class SbatchCnvJobs(threading.Thread):
     """
     The Thread object for running the CNV analysis for a given cluster of samples. The jobs will be submitted to Slurm.
     """
+
     def __init__(self, cluster_id, sample_labels, sacct_watcher, config):
         threading.Thread.__init__(self)
         self.config = config
@@ -72,7 +75,7 @@ class SbatchCnvJobs(threading.Thread):
             time.sleep(10)
 
     def submit_codex(self, chromosome):
-        cmd = ['sbatch', '--partition=shortq', '--mem=8000', '--cpus=2',
+        cmd = ['sbatch', '--partition=shortq', '--qos=shortq', '--time=12:00:00', '--mem=8000', '--cpus-per-task=2',
                '--job-name=codex_cls{}_chr{}'.format(self.cluster_id, chromosome),
                '--error={}/codex_results/codex_cls{}_chr{}.log'.format(self.config['project_folder'], self.cluster_id,
                                                                        chromosome),
@@ -90,10 +93,12 @@ class SbatchCnvJobs(threading.Thread):
         self.pid_states[job_id] = 'PENDING'
 
     def submit_exomedepth(self):
-        cmd = ['sbatch', '--partition=shortq', '--mem=8000', '--cpus=2',
+        cmd = ['sbatch', '--partition=shortq', '--qos=shortq', '--time=12:00:00', '--mem=8000', '--cpus-per-task=2',
                '--job-name=exomedepth_cls{}'.format(self.cluster_id),
-               '--error={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'], self.cluster_id),
-               '--output={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'], self.cluster_id),
+               '--error={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'],
+                                                                           self.cluster_id),
+               '--output={}/exomedepth_results/exomedepth_cls{}.log'.format(self.config['project_folder'],
+                                                                            self.cluster_id),
                os.path.join(self.config['pipeline_folder'], 'exomedepth_CNV.R'),
                '--bed', self.config['bed_file'],
                '--cluster', str(self.cluster_id),
@@ -119,6 +124,7 @@ class SacctWatcher(threading.Thread):
     The class for creating the SacctWatcher Thread object. This object creates a dictionary of Sacct output and updates
     it every 10 seconds. The other threads can get the updated information from this object without burdening the Slurm
     """
+
     def __init__(self):
         threading.Thread.__init__(self)
         self.sacct_dict = {}
@@ -170,7 +176,8 @@ def sbatch_read_counting(new_samples, sample_annotations, config):
     project_folder = config['project_folder']
     coverage_jobs = {}
     for sample in new_samples:
-        cmd = ['sbatch', '--job-name={}_exome_RC'.format(sample), '--mem=8000', '--cpus=1', '--partition=shortq',
+        cmd = ['sbatch', '--job-name={}_exome_RC'.format(sample), '--mem=8000', '--cpus-per-task=1', '--partition=shortq',
+               '--qos=shortq', '--time=12:00:00',
                '--error={}/read_counts/{}_exome_RC.csv.log'.format(project_folder, sample),
                '--output={}/read_counts/{}_exome_RC.csv.log'.format(project_folder, sample),
                coverage_script,
@@ -193,11 +200,11 @@ def sbatch_read_counting(new_samples, sample_annotations, config):
                 complete_count += 1
             elif coverage_jobs[j] == 'FAILED' or coverage_jobs[j] == 'CANCELLED':
                 fail_count += 1
-        #print(str(coverage_jobs))
+        # print(str(coverage_jobs))
         time.sleep(60)
     print('{} out of {} read count jobs were completed and {} of them failed'.format(complete_count,
-                                                                                         len(coverage_jobs),
-                                                                                         fail_count))
+                                                                                     len(coverage_jobs),
+                                                                                     fail_count))
     the_watcher.stop()
 
 
@@ -368,7 +375,7 @@ def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, lengt
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
     bar = fill * filledLength + '-' * (length - filledLength)
-    print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end = printEnd)
+    print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end=printEnd)
     # Print New Line on Complete
     if iteration == total:
         print()
@@ -423,7 +430,7 @@ if __name__ == "__main__":
     bam_suffix = config['bam_suffix']
     bam_files = []
     for f in os.listdir(bam_folder):
-        if f[len(f)-len(bam_suffix):] == bam_suffix:
+        if f[len(f) - len(bam_suffix):] == bam_suffix:
             bam_files.append(f)
     for bam_file in bam_files:
         sample_name = bam_file[len(bam_prefix):len(bam_file) - len(bam_suffix)]
@@ -471,7 +478,7 @@ if __name__ == "__main__":
     print('Now retrieving read counts of the first 10k regions/exons for clustering the samples')
     for rc_file in rc_files:
         counter += 1
-        #print_progress_bar(counter, len(rc_files))
+        # print_progress_bar(counter, len(rc_files))
         print('{}/{} read counts were retrieved'.format(counter, len(rc_files)), end='\r')
         sample_name = rc_file.replace('_exome_RC.csv.gz', '')
         rc_file = os.path.join(project_folder, 'read_counts', rc_file)
@@ -494,7 +501,8 @@ if __name__ == "__main__":
     if len(failed_samples) > 0:
         print('\n{} out of {} samples did not have adequate coverage for CNV analysis:\n{}'.format(len(failed_samples),
                                                                                                    len(rc_files),
-                                                                                                   '\n'.join(failed_samples.keys())))
+                                                                                                   '\n'.join(
+                                                                                                       failed_samples.keys())))
 
     print('Now performing the clustering')
     samples_list = list(rc_dict.keys())
@@ -584,12 +592,11 @@ if __name__ == "__main__":
                                               'annotated_results',
                                               '{}_AnnotSV.tsv'.format(sample_name))
             if not os.path.exists(sample_result_file) and sample_name in samples_list:
-                if sample_labels[sample_name]['label'] == int(clusterer.labels_[l])\
+                if sample_labels[sample_name]['label'] == int(clusterer.labels_[l]) \
                         or sample_labels[sample_name]['likely'] == int(clusterer.labels_[l]):
                     new_sample_exists = True
         if str(clusterer.labels_[l]) not in unique_labels and new_sample_exists:
             unique_labels[str(clusterer.labels_[l])] = True
-
 
     if args.engine == 'slurm':
         print("Submitting CNV analysis jobs to slurm")
@@ -655,7 +662,8 @@ if __name__ == "__main__":
                                        '{}_CODEX2.tsv'.format(sample_name))
         if os.path.exists(sample_cnv_file):
             continue
-        sample_cnv_lines = ['sample_name\tchr\tcnv\tst_bp\ted_bp\tlength_kb\tst_exon\ted_exon\traw_cov\tnorm_cov\tcopy_no\tlratio\tmBIC\n']
+        sample_cnv_lines = [
+            'sample_name\tchr\tcnv\tst_bp\ted_bp\tlength_kb\tst_exon\ted_exon\traw_cov\tnorm_cov\tcopy_no\tlratio\tmBIC\n']
         for chromosome in range(1, 23):
             cluster_file = os.path.join(project_folder, 'codex_results',
                                         'cls{}_CODEX2_chr{}.tsv'.format(sample_cluster, chromosome))
@@ -688,7 +696,8 @@ if __name__ == "__main__":
     # Save the final sample annotations and stats
     sas_name = now.strftime("%Y_%m_%d_%H.%M.%S_CNV_pipeline_stats.tsv")
     sas_file = os.path.join(config['project_folder'], sas_name)
-    field_names = ['sample_name', 'bam_file', 'mean_read_count', 'cluster_label', 'closest_cluster_label', 'CODEX2_cnv_count']
+    field_names = ['sample_name', 'bam_file', 'mean_read_count', 'cluster_label', 'closest_cluster_label',
+                   'CODEX2_cnv_count']
     with open(sas_file, 'w') as sas_out:
         sas_writer = csv.DictWriter(sas_out, fieldnames=field_names, dialect='excel-tab')
         sas_writer.writeheader()
