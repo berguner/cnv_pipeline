@@ -23,13 +23,6 @@ RUN apt-get -y update && \
 
 RUN pip3 install pandas numpy scikit-learn hdbscan plotly
 
-#WORKDIR /annotsv
-#RUN git clone https://github.com/lgmgeo/AnnotSV.git && \
-#       cd AnnotSV/ && \
-#       make PREFIX=. install && \
-#       make DESTDIR= PREFIX=. install-human-annotation
-#ENV ANNOTSV="/annotsv/AnnotSV"
-
 ENV ANNOTSV_VERSION=2.3
 ENV ANNOTSV_COMMIT=b5a65c1ddd71d24547f8eab521925f98ece10df4
 ENV ANNOTSV=/opt/AnnotSV_$ANNOTSV_VERSION
