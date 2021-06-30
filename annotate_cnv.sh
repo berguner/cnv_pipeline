@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 PROJECT_FOLDER=$1
 SAMPLE_NAME=$2
@@ -20,7 +20,7 @@ fi
 
 if [[ -z "${ANNOTSV}" ]]; then
   echo "\$ANNOTSV environment variable was not set, please setup AnnotSV first."
-  exit -1
+  exit 1
 fi
 
 if [[ -f "$CODEX_TSV" && -f "$EDP_TSV" ]]; then
