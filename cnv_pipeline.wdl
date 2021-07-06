@@ -66,6 +66,7 @@ workflow cnv_pipeline {
         input:
             project_folder = project_folder,
             pipeline_folder = pipeline_folder,
+            assembly = assembly,
             codex_log = extract_codex_sample_results.log_file,
             exomedepth_logs = exomedepth.exomedepth_log
     }
@@ -301,6 +302,7 @@ task annotate_cnv {
         String project_folder
         String pipeline_folder
         File codex_log
+        String assembly
         Array[File] exomedepth_logs
 
         # runtime parameters
@@ -314,12 +316,14 @@ task annotate_cnv {
     String annotation_script = "~{pipeline_folder}/annotate_cnv.sh"
     command <<<
         [ ! -d "~{project_folder}/annotated_results" ] && mkdir ~{project_folder}/annotated_results ;
+        ASSEMBLY=''
+        if [ "~{assembly}" = "b37" ] ; then ASSEMBLY="GRCh37"; else ASSEMBLY="GRCh38"; fi
 
         for i in ~{project_folder}/read_counts/*RC.csv.gz;
         do
             BN=$(basename $i);
             SN=${BN/_exome_RC.csv.gz/};
-            [ ! -f "~{project_folder}/annotated_results/${SN}_AnnotSV.tsv" ] && bash ~{annotation_script} ~{project_folder} ${SN} >> ~{project_folder}/annotated_results/AnnotSV.log 2>&1;
+            [ ! -f "~{project_folder}/annotated_results/${SN}_AnnotSV.tsv" ] && bash ~{annotation_script} ~{project_folder} ${SN} ${ASSEMBLY} >> ~{project_folder}/annotated_results/AnnotSV.log 2>&1;
         done
     >>>
 
