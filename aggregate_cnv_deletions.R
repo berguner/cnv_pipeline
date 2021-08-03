@@ -53,14 +53,18 @@ if(!dir.exists(output_dir)){
   dir.create(output_dir)
 }
 
+project_folder <- args$project_folder
+
 ## optional parameters for cross cohort annotation
 external_annot_file <- get_checked_env("EXT_ANN_FILE", dofail=FALSE)
 external_annot_name <- get_checked_env("EXT_ANN_PREFIX", dofail=FALSE)
 
 all_gene_symbol_file <- args$all_gene_symbol_file  ## genes from panel panel
-canonical_file <- args$all_gene_symbol_file ## exported through REST api
+canonical_file <- args$canonical_file ## exported through REST api
 pli_score_file <- args$pli_score_file ## ftp://ftp.broadinstitute.org/pub/ExAC_release/release0.3.1/functional_gene_constraint/fordist_cleaned_exac_r03_march16_z_pli_rec_null_data.txt
 hi_score_file <- args$hi_score_file ## https://decipher.sanger.ac.uk/files/downloads/HI_Predictions_Version3.bed.gz
+
+gtf <- args$gtf
 
 ### Load libraries
 print(paste("Process",project,"..."))
@@ -95,14 +99,14 @@ canonical_transcript$is_canonical <- "YES"
 ## Load resources
 ## for annotation of gene level
 gene_ranges <-
-  import(con = args$gtf,
+  import(con = gtf,
          genome = "hs37d5",
          feature.type = "gene") 
 geneid_to_annot <- mcols(gene_ranges)[c("gene_id", "gene_name", "gene_biotype")]
 
 ## Load ensembl gene list to find protein coding genes
 exon_ranges <-
-  import(con = args$gtf,
+  import(con = gtf,
          genome = "hs37d5",
          feature.type = "exon")
 
@@ -113,9 +117,10 @@ exon_ranges.ensembl <- exon_ranges[mcols(exon_ranges)$source %in% c("ensembl","e
 ######
 ## find CNV files for each pipeline
 unique_cols <- c("Sample.Name","Sample.Project.Name")
+mft <- mft[!mft$PairedReads.Exclude,]
 target <- unique(mft[,unique_cols])
-target$codex <- file.path(args$project_folder, 'codex_results', 'sample_results', paste(target$Sample.Name,"_CODEX2.tsv", sep=""))
-target$exome_depth <- file.path(args$project_folder, 'exomedepth_results', paste(target$Sample.Name,"_ExomeDepth.tsv", sep=""))
+target$codex <- file.path(project_folder, 'codex_results', 'sample_results', paste(target$Sample.Name,"_CODEX2.tsv", sep=""))
+target$exome_depth <- file.path(project_folder, 'exomedepth_results', paste(target$Sample.Name,"_ExomeDepth.tsv", sep=""))
 # check if they exist
 target$codex_exist <- file.exists(target$codex)
 target$exome_depth_exist <- file.exists(target$exome_depth)
@@ -129,6 +134,7 @@ combine_data <- function(x, file_param){
   if(!file.exists(target_file)) {
     return(NA)
   }
+  
   d <- read.delim(target_file, quote='"', sep="\t")
   if(nrow(d) < 1){
     return(NA)
@@ -149,20 +155,26 @@ data.exome_depth.del <- subset(data.exome_depth, type == "deletion")
 ## Find overlaps
 
 ## transfer into GRanges
-range.codex <- GRanges(
-  data.codex.del$chr, 
-  IRanges(data.codex.del$st_bp, data.codex.del$ed_bp),'*',
-  sample_name=data.codex.del$name,
-  copy_no=data.codex.del$copy_no,
-  lratio=data.codex.del$lratio
-)
+
+remove_chr <- function(chr){
+  return (sub("chr","",chr))
+}
 
 range.exome_depth <- GRanges(
-  data.exome_depth.del$chromosome, 
+  remove_chr(data.exome_depth.del$chromosome), 
   IRanges(data.exome_depth.del$start, data.exome_depth.del$end),'*',
   sample_name=data.exome_depth.del$name,
   reads.ratio=data.exome_depth.del$reads.ratio,
   BF=data.exome_depth.del$BF
+)
+
+range.codex <- GRanges(
+  remove_chr(data.codex.del$chr), 
+  IRanges(data.codex.del$st_bp, data.codex.del$ed_bp),'*',
+  sample_name=data.codex.del$name,
+  copy_no=data.codex.del$copy_no,
+  lratio=data.codex.del$lratio,
+  seqinfo=seqinfo(range.exome_depth)
 )
 
 #####################
