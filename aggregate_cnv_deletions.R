@@ -230,7 +230,7 @@ gene_data_annot <- merge(gene_data_annot, geneid_to_annot, by="gene_id")
 gene_sample <- as.data.frame(unique(gene_data_annot[,c("gene_id", "gene_name","sample_name")]))
 cnt_genes <- dcast(gene_sample, gene_name + gene_id ~ . , length, value.var = "gene_id")
 colnames(cnt_genes) <- c("gene_name", "gene_id","sample_cnt")
-cnt_genes <- merge(cnt_genes, pli[,c("gene","pLI", "lof_z", "mis_z", "pRec", "pNull")], by.x="gene_name", by.y="gene", all.x=TRUE)
+cnt_genes <- merge(cnt_genes, pli[,c("gene","pLI", "lof_z", "mis_z", "pRec", "pNull", "oe_lof_upper")], by.x="gene_name", by.y="gene", all.x=TRUE)
 cnt_genes <- merge(cnt_genes, hi[,c("gene_name","hi_score")], by.x="gene_name", by.y="gene_name", all.x=TRUE)
 ## add gene panel flag for easier filtering
 cnt_genes$in_gene_panel <- cnt_genes$gene_name %in% genelist
@@ -241,7 +241,7 @@ gene_data_annot <- merge(gene_data_annot, cnt_genes, by.x="gene_id", by.y="gene_
 
 cols=c("call_id", "gene_id", "gene_name", "sample_name", "sample_cnt", "in_gene_panel",
        "codex_lratio", "codex_copy_number", "exomedepth_bf", "exomedepth_ratio", 
-       "hi_score", "pLI", "pRec", "pNull",
+       "hi_score", "pLI", "pRec", "pNull", "oe_lof_upper",
        "gene_biotype"
 )
 
@@ -256,7 +256,7 @@ write.table(
 
 cols=c("call_id", "gene_id", "gene_name", "sample_name", "sample_cnt", "in_gene_panel",
        "codex_lratio", "codex_copy_number", "exomedepth_bf", "exomedepth_ratio", 
-       "hi_score", "pLI", "pRec", "pNull"
+       "hi_score", "pLI", "pRec", "pNull", "oe_lof_upper"
 )
 
 ## comprehensive version - with all information
