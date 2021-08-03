@@ -59,7 +59,8 @@ workflow cnv_pipeline {
         input:
             project_folder = project_folder,
             pipeline_folder = pipeline_folder,
-            codex_qc = codex.codex_qc
+            codex_qc = codex.codex_qc,
+            assembly = assembly
     }
 
     call annotate_cnv {
@@ -270,6 +271,7 @@ task extract_codex_sample_results {
         String project_folder
         String pipeline_folder
         Array[File] codex_qc
+        String assembly
 
         # runtime parameters
         Int cpus = 1
@@ -281,7 +283,10 @@ task extract_codex_sample_results {
     }
     String extraction_script = "~{pipeline_folder}/extract_codex_sample_results.py"
     command <<<
+        CHROMOSOME_PREFIX=''
+        if [ "~{assembly}" = "b37" ] ; then CHROMOSOME_PREFIX=""; else CHROMOSOME_PREFIX="chr"; fi
         python3 ~{extraction_script} \
+            -c ${CHROMOSOME_PREFIX} \
             -p ~{project_folder}  > ~{project_folder}/codex_results/extract_codex_sample_results.log 2>&1;
     >>>
 

@@ -13,6 +13,11 @@ if __name__ == "__main__":
                         dest='project_folder',
                         help='Project output folder',
                         type=str)
+    parser.add_argument('--chromosome_prefix', '-c',
+                        dest='cp',
+                        help='Set this as chr for hg38',
+                        default='',
+                        type=str)
     args = parser.parse_args()
 
     # Open and parse the file containing the list of clusters and the sample names
@@ -45,7 +50,7 @@ if __name__ == "__main__":
         sample_cnv_lines = ['sample_name\tchr\tcnv\tst_bp\ted_bp\tlength_kb\tst_exon\ted_exon\traw_cov\tnorm_cov\tcopy_no\tlratio\tmBIC\n']
         for chromosome in range(1, 23):
             cluster_file = os.path.join(args.project_folder, 'codex_results',
-                                        'cls{}_CODEX2_chr{}.tsv'.format(sample_cluster, chromosome))
+                                        'cls{}_CODEX2_chr{}{}.tsv'.format(sample_cluster, args.cp, chromosome))
             try:
                 with open(cluster_file, 'r') as my_file:
                     for line in my_file.readlines():
