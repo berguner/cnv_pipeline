@@ -100,14 +100,12 @@ canonical_transcript$is_canonical <- "YES"
 ## for annotation of gene level
 gene_ranges <-
   import(con = gtf,
-         genome = "hs37d5",
          feature.type = "gene") 
 geneid_to_annot <- mcols(gene_ranges)[c("gene_id", "gene_name", "gene_biotype")]
 
 ## Load ensembl gene list to find protein coding genes
 exon_ranges <-
   import(con = gtf,
-         genome = "hs37d5",
          feature.type = "exon")
 
 # exon_ranges.ensembl <- exon_ranges[mcols(exon_ranges)$source == "ensembl" & mcols(exon_ranges)$gene_biotype == "protein_coding"]
