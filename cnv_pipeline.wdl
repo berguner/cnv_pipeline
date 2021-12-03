@@ -1,6 +1,5 @@
 version 1.0
 
-
 workflow cnv_pipeline {
     input{
         String project_name
@@ -79,11 +78,12 @@ workflow cnv_pipeline {
             pipeline_folder = pipeline_folder,
             sample_annotation_sheet = sample_annotation_sheet,
             gtf_file = gtf_file,
-            annotsv_log = annotate_cnv.log_file,
             all_gene_symbol_file = all_gene_symbol_file,
             canonical_file = canonical_file,
             pli_score_file = pli_score_file,
-            hi_score_file = hi_score_file
+            hi_score_file = hi_score_file,
+            codex_log = extract_codex_sample_results.log_file,
+            exomedepth_logs = exomedepth.exomedepth_log
     }
 
     output {
@@ -351,11 +351,12 @@ task aggregate_cnv_deletions {
         String pipeline_folder
         String sample_annotation_sheet
         File gtf_file
-        File annotsv_log
         File all_gene_symbol_file
         File canonical_file
         File pli_score_file
         File hi_score_file
+        File codex_log
+        Array[File] exomedepth_logs
 
         # runtime parameters
         Int cpus = 1
